@@ -1,7 +1,6 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
 <title>Nexus POS</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
@@ -9,7 +8,11 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
 <style>
-body { background:#020617;color:white;font-family:sans-serif }
+body{
+background:#020617;
+color:white;
+font-family:sans-serif;
+}
 </style>
 
 </head>
@@ -19,29 +22,26 @@ body { background:#020617;color:white;font-family:sans-serif }
 
 <script>
 
-const stripeLinks = {
-hour1:"https://buy.stripe.com/3cl00I68xa0E9pg5KvcjS00",
-hour2:"https://buy.stripe.com/6oUcN7fJ7q0EdFw6OzciS01",
-hour4:"https://buy.stripe.com/9B6fZjdAZ1u8bxoc8TcjS02",
-dropzone:"https://buy.stripe.com/8x25kF9kJ0q4dFwc8TcjS03",
-membership:"https://buy.stripe.com/eVq6oJaoNa0Ebxo3CncjS04"
-}
-
-const qr = {
-hour1:"https://i.imgur.com/p2Y7GLg.png",
-hour2:"https://i.imgur.com/oW0O71q.png",
-hour4:"https://i.imgur.com/6S3bNTd.png",
-dropzone:"https://i.imgur.com/YYbPyYS.png",
-membership:"https://i.imgur.com/Id16fm3.png"
-}
+const stations = [
+"PC1","PC2","PC3","PC4","PC5","PC6","PC7","PC8",
+"Laptop1","Laptop2","Laptop3","Laptop4","Laptop5","Laptop6","Laptop7","Laptop8",
+"Xbox","PlayStation"
+]
 
 function App(){
 
-const [sessions,setSessions]=React.useState([])
+const [sessions,setSessions] = React.useState([])
+const [name,setName] = React.useState("")
+const [station,setStation] = React.useState("")
 
-function startSession(name,station,time){
+function startSession(minutes){
 
-const end=Date.now()+time*60000
+if(!name || !station){
+alert("Enter name and station")
+return
+}
+
+const end = Date.now() + minutes*60000
 
 setSessions([...sessions,{
 name,
@@ -49,28 +49,72 @@ station,
 end
 }])
 
+setName("")
+setStation("")
 }
 
-return React.createElement("div",{className:"p-6"},
+function endSession(i){
 
-React.createElement("h1",{className:"text-3xl mb-6"},"Nexus POS"),
+const s=[...sessions]
+s.splice(i,1)
 
-React.createElement("button",{
-className:"bg-green-600 p-3 rounded",
-onClick:()=>startSession("Player","PC1",60)
-},"Start 1hr Test Session"),
+setSessions(s)
 
-React.createElement("div",{className:"mt-8"},
-sessions.map((s,i)=>{
+}
 
-const mins=Math.floor((s.end-Date.now())/60000)
+return React.createElement("div",{className:"p-8"},
 
-return React.createElement("div",{key:i,className:"bg-slate-800 p-3 mb-2 rounded"},
-s.station+" - "+s.name+" - "+mins+"m")
+React.createElement("h1",{className:"text-3xl mb-6"},"THE COLLECTIVE NEXUS POS"),
 
-})
+React.createElement("div",{className:"mb-4"},
+React.createElement("input",{
+placeholder:"Player Name",
+value:name,
+onChange:e=>setName(e.target.value),
+className:"text-black p-2 mr-2 rounded"
+}),
+
+React.createElement("select",{
+value:station,
+onChange:e=>setStation(e.target.value),
+className:"text-black p-2 rounded"
+},
+
+React.createElement("option",{value:""},"Select Station"),
+
+stations.map(s=>
+React.createElement("option",{key:s,value:s},s)
+)
 
 )
+),
+
+React.createElement("div",{className:"mb-6 flex gap-3"},
+React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(60)},"1 Hour"),
+React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(120)},"2 Hour"),
+React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(240)},"4 Hour")
+),
+
+React.createElement("h2",{className:"text-xl mb-3"},"Active Sessions"),
+
+sessions.map((s,i)=>{
+
+const mins=Math.max(0,Math.floor((s.end-Date.now())/60000))
+
+return React.createElement("div",{key:i,className:"bg-slate-800 p-3 mb-2 rounded flex justify-between"},
+
+React.createElement("div",null,
+s.station+" - "+s.name+" - "+mins+"m"
+),
+
+React.createElement("button",{
+className:"bg-red-600 px-3 rounded",
+onClick:()=>endSession(i)
+},"End")
+
+)
+
+})
 
 )
 
