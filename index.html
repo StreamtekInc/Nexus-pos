@@ -22,19 +22,51 @@ font-family:sans-serif;
 
 <script>
 
+const logo = "https://i.imgur.com/FW7unv2.png"
+
 const stations = [
 "PC1","PC2","PC3","PC4","PC5","PC6","PC7","PC8",
 "Laptop1","Laptop2","Laptop3","Laptop4","Laptop5","Laptop6","Laptop7","Laptop8",
 "Xbox","PlayStation"
 ]
 
+// QR CODES
+const qr = {
+hour1:"https://i.imgur.com/p2Y7GLg.png",
+hour2:"https://i.imgur.com/oW0O71q.png",
+hour4:"https://i.imgur.com/6S3bNTd.png",
+dropzone:"https://i.imgur.com/YYbPyYS.png",
+membership:"https://i.imgur.com/Id16fm3.png"
+}
+
+function showQR(url){
+
+const w = window.open("","QR","width=500,height=600")
+
+w.document.write(`
+<html>
+<body style="background:#020617;color:white;text-align:center;font-family:sans-serif">
+
+<h2 style="font-size:28px">Scan to Pay</h2>
+
+<img src="${url}" style="width:350px;margin-top:20px">
+
+<p style="margin-top:20px">After payment, return to the POS and start the timer.</p>
+
+</body>
+</html>
+`)
+
+}
+
 function App(){
 
 const [sessions,setSessions] = React.useState([])
 const [name,setName] = React.useState("")
 const [station,setStation] = React.useState("")
+const [cash,setCash] = React.useState(0)
 
-function startSession(minutes){
+function startSession(minutes,price){
 
 if(!name || !station){
 alert("Enter name and station")
@@ -48,6 +80,10 @@ name,
 station,
 end
 }])
+
+if(price){
+setCash(cash + price)
+}
 
 setName("")
 setStation("")
@@ -64,7 +100,19 @@ setSessions(s)
 
 return React.createElement("div",{className:"p-8"},
 
-React.createElement("h1",{className:"text-3xl mb-6"},"THE COLLECTIVE NEXUS POS"),
+/* LOGO */
+
+React.createElement("div",{className:"flex items-center gap-4 mb-6"},
+React.createElement("img",{src:logo,className:"h-16"}),
+React.createElement("h1",{className:"text-3xl"},"THE COLLECTIVE NEXUS POS")
+),
+
+/* CASH TRACKER */
+
+React.createElement("div",{className:"bg-green-900 p-4 rounded mb-6"},
+React.createElement("h2",{className:"text-lg"},"Cash Drawer Today"),
+React.createElement("p",{className:"text-2xl"},"$"+cash)
+),
 
 React.createElement("div",{className:"mb-4"},
 React.createElement("input",{
@@ -89,10 +137,43 @@ React.createElement("option",{key:s,value:s},s)
 )
 ),
 
+React.createElement("h2",{className:"text-xl mb-3"},"QR Payments"),
+
+React.createElement("div",{className:"mb-6 flex gap-3 flex-wrap"},
+
+React.createElement("button",{
+className:"bg-blue-600 p-3 rounded",
+onClick:()=>showQR(qr.hour1)
+},"1 Hour $7"),
+
+React.createElement("button",{
+className:"bg-blue-600 p-3 rounded",
+onClick:()=>showQR(qr.hour2)
+},"2 Hour $12"),
+
+React.createElement("button",{
+className:"bg-blue-600 p-3 rounded",
+onClick:()=>showQR(qr.hour4)
+},"4 Hour / All Day $20"),
+
+React.createElement("button",{
+className:"bg-purple-600 p-3 rounded",
+onClick:()=>showQR(qr.dropzone)
+},"Drop Zone $13"),
+
+React.createElement("button",{
+className:"bg-yellow-600 p-3 rounded",
+onClick:()=>showQR(qr.membership)
+},"Membership $50/mo")
+
+),
+
+React.createElement("h2",{className:"text-xl mb-3"},"Cash Sessions"),
+
 React.createElement("div",{className:"mb-6 flex gap-3"},
-React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(60)},"1 Hour"),
-React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(120)},"2 Hour"),
-React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(240)},"4 Hour")
+React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(60,7)},"Cash 1 Hour"),
+React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(120,12)},"Cash 2 Hour"),
+React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(240,20)},"Cash 4 Hour")
 ),
 
 React.createElement("h2",{className:"text-xl mb-3"},"Active Sessions"),
