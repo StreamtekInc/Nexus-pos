@@ -1,209 +1,402 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Nexus POS</title>
+  <title>Nexus POS</title>
 
-<script src="https://cdn.tailwindcss.com"></script>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-<style>
-body{
-background:#020617;
-color:white;
-font-family:sans-serif;
-}
-</style>
-
+  <style>
+    body { background:#020617; color:white; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; }
+    ::-webkit-scrollbar { width: 10px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 999px; }
+  </style>
 </head>
+
 <body>
+  <div id="root"></div>
 
-<div id="root"></div>
+  <script>
+    const logo = "https://i.imgur.com/FW7unv2.png";
 
-<script>
+    const stations = [
+      "PC1","PC2","PC3","PC4","PC5","PC6","PC7","PC8",
+      "Laptop1","Laptop2","Laptop3","Laptop4","Laptop5","Laptop6","Laptop7","Laptop8",
+      "Xbox","PlayStation"
+    ];
 
-const logo = "https://i.imgur.com/FW7unv2.png"
+    const qr = {
+      hour1:"https://i.imgur.com/p2Y7GLg.png",
+      hour2:"https://i.imgur.com/oW0O71q.png",
+      hour4:"https://i.imgur.com/6S3bNTd.png",
+      dropzone:"https://i.imgur.com/YYbPyYS.png",
+      membership:"https://i.imgur.com/Id16fm3.png"
+    };
 
-const stations = [
-"PC1","PC2","PC3","PC4","PC5","PC6","PC7","PC8",
-"Laptop1","Laptop2","Laptop3","Laptop4","Laptop5","Laptop6","Laptop7","Laptop8",
-"Xbox","PlayStation"
-]
+    // Storage helpers (so timers screen can run on a different device)
+    function loadState(){
+      try{
+        return {
+          sessions: JSON.parse(localStorage.getItem("nexus_sessions") || "[]"),
+          cash: Number(localStorage.getItem("nexus_cash") || "0")
+        };
+      }catch(e){
+        return { sessions: [], cash: 0 };
+      }
+    }
+    function saveSessions(sessions){
+      localStorage.setItem("nexus_sessions", JSON.stringify(sessions));
+      // Broadcast to any other tabs/screens
+      localStorage.setItem("nexus_ping", String(Date.now()));
+    }
+    function saveCash(cash){
+      localStorage.setItem("nexus_cash", String(cash));
+      localStorage.setItem("nexus_ping", String(Date.now()));
+    }
 
-// QR CODES
-const qr = {
-hour1:"https://i.imgur.com/p2Y7GLg.png",
-hour2:"https://i.imgur.com/oW0O71q.png",
-hour4:"https://i.imgur.com/6S3bNTd.png",
-dropzone:"https://i.imgur.com/YYbPyYS.png",
-membership:"https://i.imgur.com/Id16fm3.png"
-}
+    function App(){
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get("view") || "pos";
+      const timersOnly = view === "timers";
 
-function showQR(url){
+      const initial = loadState();
 
-const w = window.open("","QR","width=500,height=600")
+      const [sessions,setSessions] = React.useState(initial.sessions);
+      const [name,setName] = React.useState("");
+      const [station,setStation] = React.useState("");
+      const [cash,setCash] = React.useState(initial.cash);
 
-w.document.write(`
-<html>
-<body style="background:#020617;color:white;text-align:center;font-family:sans-serif">
+      // tick to keep countdowns fresh
+      const [tick,setTick] = React.useState(0);
+      React.useEffect(()=>{
+        const t = setInterval(()=>setTick(x=>x+1), 5000);
+        return ()=>clearInterval(t);
+      },[]);
 
-<h2 style="font-size:28px">Scan to Pay</h2>
+      // keep in sync across tabs/screens using localStorage events
+      React.useEffect(()=>{
+        function onStorage(e){
+          if(e.key === "nexus_sessions") setSessions(JSON.parse(e.newValue || "[]"));
+          if(e.key === "nexus_cash") setCash(Number(e.newValue || "0"));
+          if(e.key === "nexus_ping"){
+            const s = loadState();
+            setSessions(s.sessions);
+            setCash(s.cash);
+          }
+        }
+        window.addEventListener("storage", onStorage);
+        return ()=>window.removeEventListener("storage", onStorage);
+      },[]);
 
-<img src="${url}" style="width:350px;margin-top:20px">
+      function minsLeft(end){
+        return Math.max(0, Math.floor((end - Date.now()) / 60000));
+      }
 
-<p style="margin-top:20px">After payment, return to the POS and start the timer.</p>
+      function sessionBadge(mins){
+        if(mins <= 0) return { label:"Expired", cls:"bg-red-600/20 text-red-200 border-red-500/30" };
+        if(mins <= 10) return { label:"Ending Soon", cls:"bg-amber-600/20 text-amber-200 border-amber-500/30" };
+        return { label:"Active", cls:"bg-emerald-600/20 text-emerald-200 border-emerald-500/30" };
+      }
 
-</body>
-</html>
-`)
+      function stationInUse(st){
+        const now = Date.now();
+        return sessions.some(s => s.station === st && s.end > now);
+      }
 
-}
+      function addSession(minutes){
+        const end = Date.now() + minutes * 60000;
+        const next = [{ name, station, end }, ...sessions];
+        setSessions(next);
+        saveSessions(next);
+        setName("");
+        setStation("");
+      }
 
-function App(){
+      function startCashSession(minutes, price){
+        if(!name || !station){ alert("Enter name and station"); return; }
+        if(stationInUse(station)){ alert(station + " is already in use."); return; }
+        addSession(minutes);
+        const nextCash = cash + price;
+        setCash(nextCash);
+        saveCash(nextCash);
+      }
 
-const [sessions,setSessions] = React.useState([])
-const [name,setName] = React.useState("")
-const [station,setStation] = React.useState("")
-const [cash,setCash] = React.useState(0)
+      function startCardSession(minutes){
+        if(!name || !station){ alert("Enter name and station FIRST, then start timer after payment."); return; }
+        if(stationInUse(station)){ alert(station + " is already in use."); return; }
+        addSession(minutes);
+      }
 
-function startSession(minutes,price){
+      function endSession(i){
+        const next = [...sessions];
+        next.splice(i,1);
+        setSessions(next);
+        saveSessions(next);
+      }
 
-if(!name || !station){
-alert("Enter name and station")
-return
-}
+      function openQR(url, titleText, minutes){
+        const w = window.open("","QR","width=520,height=720");
+        w.document.write(`
+          <html>
+            <body style="margin:0;background:#020617;color:white;text-align:center;font-family:ui-sans-serif,system-ui">
+              <div style="padding:22px">
+                <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:14px">
+                  <img src="${logo}" style="height:48px" />
+                  <div style="text-align:left">
+                    <div style="font-size:18px;font-weight:800">THE COLLECTIVE NEXUS</div>
+                    <div style="font-size:12px;opacity:.75">Powered by Streamtek</div>
+                  </div>
+                </div>
 
-const end = Date.now() + minutes*60000
+                <div style="font-size:22px;font-weight:900;margin:12px 0">${titleText || "Scan to Pay"}</div>
 
-setSessions([...sessions,{
-name,
-station,
-end
-}])
+                <div style="background:#0b1220;border:1px solid rgba(255,255,255,.10);padding:16px;border-radius:16px;display:inline-block">
+                  <img src="${url}" style="width:360px;max-width:80vw" />
+                </div>
 
-if(price){
-setCash(cash + price)
-}
+                <div style="margin-top:14px;font-size:13px;opacity:.85">
+                  After payment, click the button below to start the timer.
+                </div>
 
-setName("")
-setStation("")
-}
+                <button id="startBtn"
+                  style="margin-top:14px;width:100%;max-width:360px;padding:14px;border-radius:14px;border:0;background:#10b981;color:#001b10;font-weight:900;font-size:16px;cursor:pointer">
+                  Start Timer (Card Paid)
+                </button>
 
-function endSession(i){
+                <button id="closeBtn"
+                  style="margin-top:10px;width:100%;max-width:360px;padding:12px;border-radius:14px;border:1px solid rgba(255,255,255,.18);background:transparent;color:white;font-weight:700;font-size:14px;cursor:pointer">
+                  Close
+                </button>
+              </div>
 
-const s=[...sessions]
-s.splice(i,1)
+              <script>
+                const minutes = ${minutes || 0};
+                document.getElementById("startBtn").addEventListener("click", () => {
+                  // send message to opener (POS) to start the card timer
+                  if(window.opener){
+                    window.opener.postMessage({ type: "NEXUS_START_CARD_TIMER", minutes }, "*");
+                  }
+                });
+                document.getElementById("closeBtn").addEventListener("click", () => window.close());
+              <\/script>
+            </body>
+          </html>
+        `);
+      }
 
-setSessions(s)
+      // Listen for card-paid start from QR popup
+      React.useEffect(()=>{
+        function onMessage(e){
+          if(e && e.data && e.data.type === "NEXUS_START_CARD_TIMER"){
+            startCardSession(Number(e.data.minutes || 0));
+          }
+        }
+        window.addEventListener("message", onMessage);
+        return ()=>window.removeEventListener("message", onMessage);
+      }, [name, station, sessions]);
 
-}
+      // --- Timers-only screen ---
+      if(timersOnly){
+        const active = sessions
+          .filter(s => s.end > Date.now())
+          .sort((a,b)=>a.end-b.end);
 
-return React.createElement("div",{className:"p-8"},
+        return React.createElement("div",{className:"min-h-screen p-4 md:p-6 bg-slate-950"},
+          React.createElement("div",{className:"max-w-7xl mx-auto"},
+            React.createElement("div",{className:"flex items-center justify-between mb-4"},
+              React.createElement("div",{className:"flex items-center gap-3"},
+                React.createElement("img",{src:logo,className:"h-12 w-auto"}),
+                React.createElement("div",null,
+                  React.createElement("div",{className:"text-2xl font-extrabold"},"Station Timers"),
+                  React.createElement("div",{className:"text-sm text-slate-400"},"THE COLLECTIVE NEXUS • Powered by Streamtek")
+                )
+              ),
+              React.createElement("div",{className:"text-xs text-slate-500"},"Live view • Updates every 5 seconds")
+            ),
 
-/* LOGO */
+            active.length === 0
+              ? React.createElement("div",{className:"text-slate-400"},"No active sessions")
+              : React.createElement("div",{className:"grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3"},
+                  active.map((s,i)=>{
+                    const mins = minsLeft(s.end);
+                    const badge = sessionBadge(mins);
+                    const cardBg = mins <= 10 ? "bg-amber-600/10" : "bg-slate-900/60";
 
-React.createElement("div",{className:"flex items-center gap-4 mb-6"},
-React.createElement("img",{src:logo,className:"h-16"}),
-React.createElement("h1",{className:"text-3xl"},"THE COLLECTIVE NEXUS POS")
-),
+                    return React.createElement("div",{
+                      key:i,
+                      className:`rounded-2xl ${cardBg} border border-white/10 p-4`
+                    },
+                      React.createElement("div",{className:"flex items-center justify-between"},
+                        React.createElement("div",{className:"text-lg font-bold"}, s.station),
+                        React.createElement("span",{className:`text-xs px-2 py-1 rounded-full border ${badge.cls}`}, badge.label)
+                      ),
+                      React.createElement("div",{className:"mt-2 text-slate-200 text-base font-semibold"}, s.name),
+                      React.createElement("div",{className:"mt-2 text-4xl font-extrabold"}, mins + "m")
+                    );
+                  })
+                )
+          )
+        );
+      }
 
-/* CASH TRACKER */
+      // --- Full POS UI ---
+      return React.createElement("div",{className:"min-h-screen p-6 md:p-10"},
+        // Header
+        React.createElement("div",{className:"max-w-6xl mx-auto mb-6"},
+          React.createElement("div",{className:"flex items-center justify-between gap-4 rounded-2xl bg-slate-900/60 border border-white/10 p-5 shadow"},
+            React.createElement("div",{className:"flex items-center gap-4"},
+              React.createElement("img",{src:logo,className:"h-14 w-auto"}),
+              React.createElement("div",null,
+                React.createElement("div",{className:"text-2xl font-extrabold tracking-tight"},"THE COLLECTIVE NEXUS POS"),
+                React.createElement("div",{className:"text-sm text-slate-400"},"Powered by Streamtek • Front Desk Command")
+              )
+            ),
+            React.createElement("div",{className:"flex items-center gap-3"},
+              React.createElement("a",{
+                href: window.location.origin + window.location.pathname + "?view=timers",
+                target:"_blank",
+                className:"rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-3 text-sm font-semibold"
+              },"Open Timers Screen"),
+              React.createElement("div",{className:"rounded-xl bg-emerald-900/30 border border-emerald-500/20 px-4 py-3 text-right"},
+                React.createElement("div",{className:"text-xs text-emerald-200/80"},"Cash Drawer Today"),
+                React.createElement("div",{className:"text-2xl font-bold"},"$"+cash)
+              )
+            )
+          )
+        ),
 
-React.createElement("div",{className:"bg-green-900 p-4 rounded mb-6"},
-React.createElement("h2",{className:"text-lg"},"Cash Drawer Today"),
-React.createElement("p",{className:"text-2xl"},"$"+cash)
-),
+        React.createElement("div",{className:"max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6"},
 
-React.createElement("div",{className:"mb-4"},
-React.createElement("input",{
-placeholder:"Player Name",
-value:name,
-onChange:e=>setName(e.target.value),
-className:"text-black p-2 mr-2 rounded"
-}),
+          // LEFT: Check-in + Payments
+          React.createElement("div",{className:"rounded-2xl bg-slate-900/60 border border-white/10 p-5 shadow"},
+            React.createElement("div",{className:"flex items-center justify-between mb-4"},
+              React.createElement("h2",{className:"text-lg font-bold"},"Player Check-In"),
+              React.createElement("div",{className:"text-xs text-slate-400"},"Enter player + choose station")
+            ),
 
-React.createElement("select",{
-value:station,
-onChange:e=>setStation(e.target.value),
-className:"text-black p-2 rounded"
-},
+            React.createElement("div",{className:"grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"},
+              React.createElement("input",{
+                placeholder:"Player Name",
+                value:name,
+                onChange:e=>setName(e.target.value),
+                className:"w-full text-black p-3 rounded-xl outline-none"
+              }),
 
-React.createElement("option",{value:""},"Select Station"),
+              React.createElement("select",{
+                value:station,
+                onChange:e=>setStation(e.target.value),
+                className:"w-full text-black p-3 rounded-xl outline-none"
+              },
+                React.createElement("option",{value:""},"Select Station"),
+                stations.map(s => React.createElement("option",{key:s,value:s}, s + (stationInUse(s) ? " (IN USE)" : "")))
+              )
+            ),
 
-stations.map(s=>
-React.createElement("option",{key:s,value:s},s)
-)
+            // QR Payments
+            React.createElement("div",{className:"mb-5"},
+              React.createElement("div",{className:"flex items-center justify-between mb-2"},
+                React.createElement("h3",{className:"text-base font-bold"},"Card Payments (QR)"),
+                React.createElement("div",{className:"text-xs text-slate-400"},"Customer scans & pays • Start timer in QR window")
+              ),
 
-)
-),
+              React.createElement("div",{className:"grid grid-cols-1 sm:grid-cols-2 gap-3"},
+                React.createElement("button",{
+                  className:"rounded-xl bg-blue-600 hover:bg-blue-500 transition px-4 py-3 font-semibold",
+                  onClick:()=>openQR(qr.hour1,"1 Hour • $7", 60)
+                },"1 Hour • $7"),
 
-React.createElement("h2",{className:"text-xl mb-3"},"QR Payments"),
+                React.createElement("button",{
+                  className:"rounded-xl bg-blue-600 hover:bg-blue-500 transition px-4 py-3 font-semibold",
+                  onClick:()=>openQR(qr.hour2,"2 Hours • $12", 120)
+                },"2 Hours • $12"),
 
-React.createElement("div",{className:"mb-6 flex gap-3 flex-wrap"},
+                React.createElement("button",{
+                  className:"rounded-xl bg-blue-600 hover:bg-blue-500 transition px-4 py-3 font-semibold",
+                  onClick:()=>openQR(qr.hour4,"4 Hours / All Day • $20", 240)
+                },"4 Hours / All Day • $20"),
 
-React.createElement("button",{
-className:"bg-blue-600 p-3 rounded",
-onClick:()=>showQR(qr.hour1)
-},"1 Hour $7"),
+                React.createElement("button",{
+                  className:"rounded-xl bg-purple-600 hover:bg-purple-500 transition px-4 py-3 font-semibold",
+                  onClick:()=>openQR(qr.dropzone,"Drop Zone • $13", 180)
+                },"Drop Zone • $13"),
 
-React.createElement("button",{
-className:"bg-blue-600 p-3 rounded",
-onClick:()=>showQR(qr.hour2)
-},"2 Hour $12"),
+                React.createElement("button",{
+                  className:"rounded-xl bg-yellow-500 hover:bg-yellow-400 transition px-4 py-3 font-semibold text-black sm:col-span-2",
+                  onClick:()=>openQR(qr.membership,"Membership • $50/mo", 0)
+                },"Membership • $50/mo")
+              )
+            ),
 
-React.createElement("button",{
-className:"bg-blue-600 p-3 rounded",
-onClick:()=>showQR(qr.hour4)
-},"4 Hour / All Day $20"),
+            // Cash Sessions
+            React.createElement("div",null,
+              React.createElement("div",{className:"flex items-center justify-between mb-2"},
+                React.createElement("h3",{className:"text-base font-bold"},"Cash Sessions"),
+                React.createElement("div",{className:"text-xs text-slate-400"},"Adds to cash drawer total")
+              ),
 
-React.createElement("button",{
-className:"bg-purple-600 p-3 rounded",
-onClick:()=>showQR(qr.dropzone)
-},"Drop Zone $13"),
+              React.createElement("div",{className:"grid grid-cols-1 sm:grid-cols-3 gap-3"},
+                React.createElement("button",{
+                  className:"rounded-xl bg-emerald-600 hover:bg-emerald-500 transition px-4 py-3 font-semibold",
+                  onClick:()=>startCashSession(60,7)
+                },"Cash 1 Hour"),
 
-React.createElement("button",{
-className:"bg-yellow-600 p-3 rounded",
-onClick:()=>showQR(qr.membership)
-},"Membership $50/mo")
+                React.createElement("button",{
+                  className:"rounded-xl bg-emerald-600 hover:bg-emerald-500 transition px-4 py-3 font-semibold",
+                  onClick:()=>startCashSession(120,12)
+                },"Cash 2 Hours"),
 
-),
+                React.createElement("button",{
+                  className:"rounded-xl bg-emerald-600 hover:bg-emerald-500 transition px-4 py-3 font-semibold",
+                  onClick:()=>startCashSession(240,20)
+                },"Cash 4 Hours")
+              ),
 
-React.createElement("h2",{className:"text-xl mb-3"},"Cash Sessions"),
+              React.createElement("div",{className:"mt-3 text-xs text-slate-400"},
+                "Note: Card timers start from the QR window (Start Timer button)."
+              )
+            )
+          ),
 
-React.createElement("div",{className:"mb-6 flex gap-3"},
-React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(60,7)},"Cash 1 Hour"),
-React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(120,12)},"Cash 2 Hour"),
-React.createElement("button",{className:"bg-green-600 p-3 rounded",onClick:()=>startSession(240,20)},"Cash 4 Hour")
-),
+          // RIGHT: Sessions
+          React.createElement("div",{className:"rounded-2xl bg-slate-900/60 border border-white/10 p-5 shadow"},
+            React.createElement("div",{className:"flex items-center justify-between mb-4"},
+              React.createElement("h2",{className:"text-lg font-bold"},"Active Sessions"),
+              React.createElement("div",{className:"text-xs text-slate-400"},"Auto-updates every 5 seconds")
+            ),
 
-React.createElement("h2",{className:"text-xl mb-3"},"Active Sessions"),
+            sessions.length === 0
+              ? React.createElement("div",{className:"text-slate-400 text-sm"},"No sessions yet.")
+              : React.createElement("div",{className:"space-y-3 max-h-[65vh] overflow-auto pr-1"},
+                  sessions.map((s,i)=>{
+                    const mins = minsLeft(s.end);
+                    const badge = sessionBadge(mins);
 
-sessions.map((s,i)=>{
+                    return React.createElement("div",{
+                      key:i,
+                      className:"rounded-2xl bg-slate-950/50 border border-white/10 p-4 flex items-center justify-between"
+                    },
+                      React.createElement("div",null,
+                        React.createElement("div",{className:"flex items-center gap-2"},
+                          React.createElement("div",{className:"text-lg font-bold"}, s.station),
+                          React.createElement("span",{className:`text-xs px-2 py-1 rounded-full border ${badge.cls}`}, badge.label)
+                        ),
+                        React.createElement("div",{className:"text-slate-300"}, s.name),
+                        React.createElement("div",{className:"text-2xl font-extrabold mt-1"}, mins + "m")
+                      ),
+                      React.createElement("button",{
+                        className:"rounded-xl bg-red-600 hover:bg-red-500 transition px-4 py-2 font-semibold",
+                        onClick:()=>endSession(i)
+                      },"End")
+                    );
+                  })
+                )
+          )
+        )
+      );
+    }
 
-const mins=Math.max(0,Math.floor((s.end-Date.now())/60000))
-
-return React.createElement("div",{key:i,className:"bg-slate-800 p-3 mb-2 rounded flex justify-between"},
-
-React.createElement("div",null,
-s.station+" - "+s.name+" - "+mins+"m"
-),
-
-React.createElement("button",{
-className:"bg-red-600 px-3 rounded",
-onClick:()=>endSession(i)
-},"End")
-
-)
-
-})
-
-)
-
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App))
-
-</script>
-
+    ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+  </script>
 </body>
 </html>
