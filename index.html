@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nexus POS</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<style>
+body { background:#020617;color:white;font-family:sans-serif }
+</style>
+
+</head>
+<body>
+
+<div id="root"></div>
+
+<script>
+
+const stripeLinks = {
+hour1:"https://buy.stripe.com/3cl00I68xa0E9pg5KvcjS00",
+hour2:"https://buy.stripe.com/6oUcN7fJ7q0EdFw6OzciS01",
+hour4:"https://buy.stripe.com/9B6fZjdAZ1u8bxoc8TcjS02",
+dropzone:"https://buy.stripe.com/8x25kF9kJ0q4dFwc8TcjS03",
+membership:"https://buy.stripe.com/eVq6oJaoNa0Ebxo3CncjS04"
+}
+
+const qr = {
+hour1:"https://i.imgur.com/p2Y7GLg.png",
+hour2:"https://i.imgur.com/oW0O71q.png",
+hour4:"https://i.imgur.com/6S3bNTd.png",
+dropzone:"https://i.imgur.com/YYbPyYS.png",
+membership:"https://i.imgur.com/Id16fm3.png"
+}
+
+function App(){
+
+const [sessions,setSessions]=React.useState([])
+
+function startSession(name,station,time){
+
+const end=Date.now()+time*60000
+
+setSessions([...sessions,{
+name,
+station,
+end
+}])
+
+}
+
+return React.createElement("div",{className:"p-6"},
+
+React.createElement("h1",{className:"text-3xl mb-6"},"Nexus POS"),
+
+React.createElement("button",{
+className:"bg-green-600 p-3 rounded",
+onClick:()=>startSession("Player","PC1",60)
+},"Start 1hr Test Session"),
+
+React.createElement("div",{className:"mt-8"},
+sessions.map((s,i)=>{
+
+const mins=Math.floor((s.end-Date.now())/60000)
+
+return React.createElement("div",{key:i,className:"bg-slate-800 p-3 mb-2 rounded"},
+s.station+" - "+s.name+" - "+mins+"m")
+
+})
+
+)
+
+)
+
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App))
+
+</script>
+
+</body>
+</html>
